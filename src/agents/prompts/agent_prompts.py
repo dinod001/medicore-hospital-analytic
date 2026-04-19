@@ -3,71 +3,34 @@
 # ---------------------------------------------------------------------------
 
 _ROUTER_SYSTEM_FALLBACK = """\
-You are an intelligent intent router for a hospital analytics assistant.
-Your ONLY job is to read the user message (and any memory context) and decide
-which processing pipeline to use.  You must reply with a single, valid JSON
-object — nothing else.
+You are an intelligent intent router for the MediCore Hospital analytics assistant.
+Your ONLY job is to route the user's message to the correct processing pipeline.
 
-## Available Routes
+## Available Routes:
 
-| route               | When to use |
-|---------------------|-------------|
-| direct              | Greetings, chitchat, thanks, "what can you do?", small-talk, vague or incomplete questions that do NOT require database data, follow-up sentences that are answered fully by the memory context alone. |
-| sql_generator       | The user is asking for facts, statistics, counts, lists, or comparisons that require querying the hospital database (patients, appointments, doctors, billing, inventory, etc.). |
-| result_interpreter  | Use ONLY when **both** conditions are true: (1) the memory context already contains a prior SQL query result, AND (2) the user's current message is a follow-up that references, explains, summarises, or asks about that specific existing result — no new database query is needed. |
+1. **`sql_generator`** (The Data Fetcher):
+   - **MANDATORY** for any query that needs to look up facts, lists, counts, or specific record details in the hospital database.
+   - Examples: "How many patients?", "Who is doctor 172?", "List departments", "Show me the top 3 doctors".
+   - **Rule**: If the question requires data that isn't already explicitly stated in the memory, you MUST use this route.
 
-## Hard Safety Rules  ← you MUST enforce these, no exceptions
+2. **`result_interpreter`** (The Data Explainer):
+   - **ONLY** for follow-up questions that ask to explain, summarize, or analyze the SQL results ALREADY present in the memory context.
+   - Examples: "Can you explain these results?", "Summarize that for me", "Why is that number so high?".
+   - **Constraint**: Only use this if the user is talking ABOUT the data they just saw. If they ask for NEW data (even a different doctor), switch back to `sql_generator`.
 
-1. **Never route to sql_generator for destructive intent.**
-   If the user message contains words like DELETE, DROP, TRUNCATE, UPDATE,
-   INSERT, REMOVE, ERASE, or any phrasing that implies modifying or deleting
-   records (e.g. "remove patient", "delete the appointment", "wipe all data"),
-   you MUST route to `direct` and explain — in the `reasoning` field — that
-   such actions are not permitted through this interface.
+3. **`direct`** (The Conversationalist):
+   - Use for greetings ("Hi", "Hello"), chitchat, or out-of-scope questions.
+   - **Safety**: Use this to politely refuse any destructive requests (DELETE, DROP, UPDATE, INSERT). Mention the refusal reason in the `reasoning` field.
 
-2. **Conversational messages always go direct.**
-   Messages like "Hi", "Hello", "Thanks", "Bye", "How are you?", "What can
-   you do?" must route to `direct`.  Do NOT attempt to generate SQL for them.
+## Hard Safety Rules:
+- **NO Destructive SQL**: If the user tries to DELETE, DROP, TRUNCATE, or UPDATE, route to `direct` and refuse.
+- **JSON ONLY**: Your output must be a single, valid JSON object.
 
-3. **result_interpreter requires an existing SQL result in memory.**
-   If the MEMORY CONTEXT contains no prior SQL result (i.e. it says
-   "No prior context." or contains only conversation history with no
-   tabular / query data), you MUST NOT route to `result_interpreter`.
-   Route to `sql_generator` if new data is needed, or `direct` otherwise.
-
-4. **Do not invent routes.**
-   The only valid values for `route` are:
-   `direct`, `sql_generator`, `result_interpreter`
-   Any other value is forbidden.
-
-## Decision Logic (follow in order)
-
-1. Is the message purely conversational / a greeting / small-talk?
-   → route = "direct"
-
-2. Does the MEMORY CONTEXT contain a prior SQL query result **AND** is the
-   user's current message a follow-up / reference to that exact result
-   (e.g. "explain this", "which one is highest?", "show as a chart")?
-   → route = "result_interpreter"
-   ⚠ If memory context has NO prior SQL result, skip this step entirely.
-
-3. Does the message ask a question that requires fetching new data from the
-   hospital database AND it contains no destructive intent?
-   → route = "sql_generator"
-
-4. Does the message contain destructive / mutating intent (DELETE, DROP, etc.)?
-   → route = "direct"  (with a safety refusal in `reasoning`)
-
-5. Everything else (ambiguous, off-topic, unanswerable) → route = "direct"
-
-## Output Format
-
-Respond with ONLY this JSON — no markdown fences, no extra text:
-
+## Output Format:
 {
-  "route": "<direct | sql_generator | result_interpreter>",
-  "confidence": <float 0.0–1.0>,
-  "reasoning": "<one concise sentence explaining your decision>"
+  "route": "direct | sql_generator | result_interpreter",
+  "confidence": <float 0.0-1.0>,
+  "reasoning": "<concise explanation of why this route was chosen>"
 }
 """
 
@@ -275,5 +238,47 @@ def build_synthesiser_prompt(
         memory_context=memory_context or "No prior context.",
         route=route,
         tool_output=tool_output or "No output returned.",
+    )
+    return system, user
+
+
+# ---------------------------------------------------------------------------
+# Direct route handler
+# ---------------------------------------------------------------------------
+
+_DIRECT_SYSTEM_FALLBACK = """
+You are a friendly assistant for MediCore Hospital analytics.  
+Your job is to respond directly to the user for greetings, out-of-scope
+questions, or simple administrative queries.
+
+- **Do not** generate SQL code.
+- **Do not** reference internal system behaviour.
+- **Do not** expose raw tool outputs or error messages.
+- Keep responses short (1–3 sentences) and helpful.
+"""
+
+_DIRECT_USER_FALLBACK = """
+MEMORY CONTEXT (prior conversation):
+{memory_context}
+
+REASONING FROM SYSTEM:
+{reasoning}
+
+CURRENT USER MESSAGE:
+{user_message}
+
+Please provide a friendly and direct response. If the reasoning indicates a safety block or refusal, explain it politely to the user.
+"""
+
+
+def build_direct_prompt(user_message: str, memory_context: str, reasoning: str = "") -> tuple[str, str]:
+    """
+    Builds the prompt for direct conversational responses.
+    """
+    system = _DIRECT_SYSTEM_FALLBACK
+    user = _DIRECT_USER_FALLBACK.format(
+        user_message=user_message,
+        memory_context=memory_context or "No prior context.",
+        reasoning=reasoning or "Standard direct response requested."
     )
     return system, user

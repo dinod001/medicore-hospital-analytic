@@ -17,6 +17,7 @@ langchain-core>=0.1.0             # Core abstractions (prompts, runnables)
 langchain-community>=0.0.20       # Community integrations (includes Chroma)
 langchain-openai>=0.0.5           # OpenAI LangChain integration (Chat + Embeddings)
 langchain-text-splitters>=0.2.0   # Text chunking utilities (semantic & fixed)
+langgraph>=0.0.30                 # LangGraph — for building stateful, multi-agent workflows
 
 # ========================================
 # Web Crawling and Content Extraction
