@@ -2,8 +2,13 @@ from loguru import logger
 from src.agents.router import QueryRouter
 from src.agents.nl2sql_agent import NL2SQLAgent
 from src.agents.state import AgentState
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 from langgraph.graph import StateGraph, END
+from src.infrastructure.observability import (
+    observe,
+    update_current_trace,
+)
+from src.dashboard.chart_from_result import tabular_result_to_chart
 
 
 class AgentOrchestrator:
@@ -59,8 +64,17 @@ class AgentOrchestrator:
             }
         )
 
-        # 3. Define Normal Edges
-        workflow.add_edge("nl2sql_agent", "synthesizer")
+        def after_nl2sql(state: AgentState):
+            """Skip synthesizer when NL2SQL already produced the final user-facing answer (retry fallback)."""
+            if state.get("final_answer"):
+                return END
+            return "synthesizer"
+
+        workflow.add_conditional_edges(
+            "nl2sql_agent",
+            after_nl2sql,
+            {"synthesizer": "synthesizer", END: END},
+        )
         workflow.add_edge("synthesizer", END)
         workflow.add_edge("direct_agent", END)
 
@@ -69,14 +83,18 @@ class AgentOrchestrator:
 
         return workflow.compile()
 
+    @observe()
     def chat_with_sql_agent(
         self, 
         user_message: str,
         memory_context: list,
-        max_retries: int = 2
+        max_retries: int = 3,
     ) -> Dict[str, Any]:
         """
         Invokes the LangGraph workflow to process the user message.
+
+        ``max_retries`` is how many times to re-run the graph if invocation throws
+        (transient errors); NL2SQL SQL retries are handled inside ``nl2sql_node``.
         """
         logger.info(f"Starting LangGraph workflow for: {user_message}")
         
@@ -95,9 +113,33 @@ class AgentOrchestrator:
             "session_id": "default_session"
         }
 
+        # 2. Log global trace info for Langfuse
+        update_current_trace(
+            user_id=initial_state["user_id"],
+            session_id=initial_state["session_id"],
+            tags=["v1.0", "langgraph-flow"],
+            metadata={"source": "cli_chat"}
+        )
+
         try:
-            # 2. Invoke the graph
-            final_state = self.graph.invoke(initial_state)
+            final_state: Optional[Dict[str, Any]] = None
+            last_exc: Optional[Exception] = None
+            for attempt in range(max_retries + 1):
+                try:
+                    final_state = self.graph.invoke(initial_state)
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    logger.warning(
+                        "Graph invoke failed (attempt {}/{}): {}",
+                        attempt + 1,
+                        max_retries + 1,
+                        e,
+                    )
+            if last_exc is not None:
+                raise last_exc
+            assert final_state is not None
             
             # 3. Update memory (Side effect outside the graph for now to keep it simple)
             if final_state.get("final_answer"):
@@ -110,13 +152,22 @@ class AgentOrchestrator:
                 if len(memory_context) > 10:
                     del memory_context[:2]
 
-            return {
+            payload: Dict[str, Any] = {
                 "status": "completed",
                 "route": final_state.get("route"),
                 "message": final_state.get("final_answer"),
+                "insight": final_state.get("final_answer"),
                 "result": final_state.get("result"),
-                "sql_generated": final_state.get("sql_generated")
+                "sql_generated": final_state.get("sql_generated"),
             }
+            chart = tabular_result_to_chart(
+                final_state.get("result"),
+                user_message=user_message,
+            )
+            if chart:
+                payload["chart"] = chart
+            payload["memory"] = memory_context
+            return payload
             
         except Exception as e:
             logger.error(f"Graph execution failed: {e}")

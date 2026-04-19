@@ -88,14 +88,14 @@ class TestOrchestratorIntegration:
         """Test trend analysis: monthly admissions vs discharges."""
         query = "Show the count of monthly admissions and discharges for each month in 2024."
         response = self.orchestrator.chat_with_sql_agent(query, [])
-
-
         
-        assert response["status"] == "completed"
-        assert response["route"] == "sql_generator"
-        assert "result" in response
-        assert len(response["result"]) > 0
-        print(f"\n[TRENDS] Result Data: {response['result'][:3]}...") # Show first 3 months
-        print(f"[TRENDS] Interpretation: {response['message']}")
+        assert response["status"] == "completed", f"Unexpected status: {response.get('status')}"
+        assert response["route"] == "sql_generator", f"Unexpected route: {response.get('route')}"
+        assert "result" in response, "No 'result' key in response"
+        assert response["result"] is not None, (
+            f"Result is None. Error: {response.get('error')}. "
+            f"SQL: {response.get('sql_generated')}"
+        )
+        assert len(response["result"]) > 0, "Result is empty — no data found for 2024"
 
 

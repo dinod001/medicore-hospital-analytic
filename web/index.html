@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MediCore Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.plot.ly" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Primary">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <span class="brand-name">MediCore</span>
+          <span class="brand-tag">Analytics</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Sections">
+        <button type="button" class="nav-item is-active" id="navKpi" data-view="kpi">
+          <span class="nav-item-title">KPI</span>
+          <span class="nav-item-desc">Standard dashboards by year</span>
+        </button>
+        <button type="button" class="nav-item" id="navChat" data-view="chat">
+          <span class="nav-item-title">General chat</span>
+          <span class="nav-item-desc">Ask anything; charts when available</span>
+        </button>
+      </nav>
+
+      <p class="sidebar-hint">API: <code>/api/dashboard/baseline</code> · <code>/api/chat</code></p>
+    </aside>
+
+    <div class="main-wrap">
+      <main id="viewKpi" class="view view-kpi is-visible" aria-labelledby="kpiHeading">
+        <header class="page-header">
+          <div>
+            <h1 id="kpiHeading">Key performance indicators</h1>
+            <p class="page-lede">Hospital metrics from your database. Select a calendar year to filter all panels.</p>
+          </div>
+          <div class="toolbar">
+            <label class="field-inline">
+              <span class="field-label">Year</span>
+              <select id="kpiYear" class="select" aria-describedby="kpiYearHelp"></select>
+            </label>
+            <button type="button" id="reloadKpi" class="btn btn-primary">Apply</button>
+          </div>
+        </header>
+
+        <p id="kpiYearHelp" class="sr-only">Filters chart data from January 1 through December 31 of the selected year.</p>
+
+        <div id="baselineStatus" class="banner banner-info hidden" role="status"></div>
+
+        <div class="panel panel-flush">
+          <div class="panel-head">
+            <h2 class="panel-title">Overview</h2>
+            <span class="pill" id="rangePill"></span>
+          </div>
+          <div id="baselineRoot" class="baseline-grid"></div>
+        </div>
+      </main>
+
+      <main id="viewChat" class="view view-chat" aria-labelledby="chatHeading">
+        <header class="page-header page-header-chat">
+          <div>
+            <h1 id="chatHeading">General chat</h1>
+            <p class="page-lede">Natural language over your data. Tabular answers may include an optional chart below the reply.</p>
+          </div>
+        </header>
+
+        <div class="chat-shell">
+          <div id="chatThread" class="chat-thread" aria-live="polite"></div>
+
+          <div id="dynamicChartWrap" class="chart-panel hidden">
+            <div class="chart-panel-head">
+              <h2 class="chart-panel-title">Visualisation</h2>
+              <span class="chart-panel-meta">From last query</span>
+            </div>
+            <div id="dynamicPlot" class="plot-host plot-host-chat"></div>
+          </div>
+
+          <div class="composer">
+            <label class="sr-only" for="chatInput">Message</label>
+            <textarea id="chatInput" class="input input-chat" rows="2" placeholder="Ask a question about patients, billing, appointments…"></textarea>
+            <div class="composer-row">
+              <p id="chatStatus" class="chat-status" aria-live="polite"></p>
+              <button type="button" id="sendChat" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

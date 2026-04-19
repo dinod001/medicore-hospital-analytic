@@ -1,0 +1,27 @@
+{
+  "note": "Illustrative Langfuse-style trace shape for coursework. Replace with an export from your Langfuse project.",
+  "trace": {
+    "name": "langgraph-flow",
+    "input": { "user_message": "How many patients are registered?" },
+    "metadata": { "source": "cli_chat" },
+    "observations": [
+      {
+        "name": "Routing Node",
+        "type": "generation",
+        "latency_ms": 420,
+        "usage": { "prompt_tokens": 800, "completion_tokens": 60, "total_tokens": 860 }
+      },
+      {
+        "name": "NL2SQL Node",
+        "type": "generation",
+        "latency_ms": 1100,
+        "usage": { "prompt_tokens": 3500, "completion_tokens": 120, "total_tokens": 3620 }
+      },
+      {
+        "name": "Synthesizer Node",
+        "type": "generation",
+        "latency_ms": 900
+      }
+    ]
+  }
+}

@@ -1,3 +1,5 @@
+from typing import Optional
+
 # ---------------------------------------------------------------------------
 # QueryRouter prompts
 # ---------------------------------------------------------------------------
@@ -131,6 +133,7 @@ MEMORY CONTEXT (prior conversation):
 
 USER QUESTION:
 {user_message}
+{retry_block}
 
 Generate the SQL query now.\
 """
@@ -193,6 +196,8 @@ def build_nl2sql_prompt(
     user_message: str,
     memory_context: str,
     schema: str,
+    *,
+    retry_feedback: Optional[str] = None,
 ) -> tuple[str, str]:
     """
     Build the (system, user) prompt pair for the NL2SQL agent.
@@ -202,14 +207,23 @@ def build_nl2sql_prompt(
         memory_context: Serialised session memory (prior turns / SQL results).
         schema:         Dynamic schema string injected at runtime — table names,
                         column types, sample rows, and FK relationships.
+        retry_feedback: When set, appended so the model can fix SQL after a failed attempt.
 
     Returns:
         A 2-tuple of (system_prompt, user_prompt).
     """
     system = _AGENT_SYSTEM_FALLBACK.format(schema=schema)
+    retry_block = ""
+    if retry_feedback:
+        retry_block = (
+            "\n\nPREVIOUS ATTEMPT — FIX OR CLARIFY:\n"
+            f"{retry_feedback.strip()}\n"
+            "Return valid read-only SQL, or the clarification JSON.\n"
+        )
     user = _AGENT_USER_FALLBACK.format(
         memory_context=memory_context or "No prior context.",
         user_message=user_message,
+        retry_block=retry_block,
     )
     return system, user
 
