@@ -4,6 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MediCore Analytics</title>
+  <script>
+    (function () {
+      try {
+        var k = "mediCoreTheme";
+        var v = localStorage.getItem(k);
+        var dark =
+          v === "dark" ||
+          (v !== "light" &&
+            typeof matchMedia === "function" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (e) {
+        document.documentElement.dataset.theme = "dark";
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://cdn.plot.ly" crossorigin />
@@ -14,9 +30,15 @@
   <div class="app">
     <aside class="sidebar" aria-label="Primary">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="brand-mark-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+            <rect class="brand-mark-bg" width="40" height="40" rx="10" ry="10" />
+            <path d="M20 11v18M11 20h18" class="brand-mark-cross" fill="none" stroke-linecap="round" />
+            <circle class="brand-mark-accent" cx="31" cy="11" r="5" />
+          </svg>
+        </span>
         <div class="brand-text">
-          <span class="brand-name">MediCore</span>
+          <span class="brand-name">Medi<span class="brand-name-accent">Core</span></span>
           <span class="brand-tag">Analytics</span>
         </div>
       </div>
@@ -31,6 +53,29 @@
           <span class="nav-item-desc">Ask anything; charts when available</span>
         </button>
       </nav>
+
+      <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="true" aria-label="Use light theme">
+        <span class="theme-toggle-label" id="themeToggleText">Light</span>
+        <span class="theme-toggle-icon" id="themeToggleIcon" aria-hidden="true"></span>
+      </button>
+      <script>
+        (function () {
+          var root = document.documentElement;
+          var dark = root.dataset.theme !== "light";
+          var btn = document.getElementById("themeToggle");
+          var label = document.getElementById("themeToggleText");
+          var icon = document.getElementById("themeToggleIcon");
+          if (!btn || !label || !icon) return;
+          btn.setAttribute("aria-pressed", dark ? "true" : "false");
+          btn.setAttribute("aria-label", dark ? "Use light theme" : "Use dark theme");
+          label.textContent = dark ? "Light" : "Dark";
+          var sun =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+          var moon =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+          icon.innerHTML = dark ? sun : moon;
+        })();
+      </script>
 
       <p class="sidebar-hint">API: <code>/api/dashboard/baseline</code> · <code>/api/chat</code></p>
     </aside>

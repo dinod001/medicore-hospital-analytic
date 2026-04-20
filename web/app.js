@@ -6,51 +6,135 @@
   "use strict";
 
   const BASE = "";
+  const THEME_STORAGE_KEY = "mediCoreTheme";
 
-  const PLOT = {
-    fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
-    paper: "transparent",
-    plot: "rgba(22, 28, 40, 0.9)",
-    grid: "rgba(148, 163, 184, 0.12)",
-    tick: "#94a3b8",
-    title: "#e2e8f0",
-    linePrimary: "#60a5fa",
-    lineMarker: "#93c5fd",
-    barHue: [217, 200, 188, 172],
-    pie: ["#60a5fa", "#a78bfa", "#34d399", "#fb7185", "#fbbf24", "#38bdf8"],
+  const PLOT_THEMES = {
+    dark: {
+      fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+      paper: "transparent",
+      plot: "rgba(22, 28, 40, 0.9)",
+      grid: "rgba(148, 163, 184, 0.12)",
+      tick: "#94a3b8",
+      title: "#e2e8f0",
+      linePrimary: "#60a5fa",
+      lineMarker: "#93c5fd",
+      barHue: [217, 200, 188, 172],
+      pie: ["#60a5fa", "#a78bfa", "#34d399", "#fb7185", "#fbbf24", "#38bdf8"],
+      emptyAnnotation: "#64748b",
+      seriesColors: ["#60a5fa", "#34d399", "#a78bfa", "#fb923c"],
+      singleLine: "#60a5fa",
+    },
+    light: {
+      fontFamily: '"IBM Plex Sans", system-ui, sans-serif',
+      paper: "transparent",
+      plot: "rgba(248, 250, 252, 0.96)",
+      grid: "rgba(71, 85, 105, 0.14)",
+      tick: "#475569",
+      title: "#1e293b",
+      linePrimary: "#2563eb",
+      lineMarker: "#3b82f6",
+      barHue: [217, 199, 175, 158],
+      pie: ["#2563eb", "#7c3aed", "#059669", "#e11d48", "#d97706", "#0284c7"],
+      emptyAnnotation: "#64748b",
+      seriesColors: ["#2563eb", "#0d9488", "#7c3aed", "#ea580c"],
+      singleLine: "#2563eb",
+    },
   };
 
+  var baselineCache = null;
+  var lastDynamicChart = null;
+
+  function getPlotTheme() {
+    var t = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    return PLOT_THEMES[t];
+  }
+
+  function syncThemeToggleUI() {
+    var btn = document.getElementById("themeToggle");
+    var label = document.getElementById("themeToggleText");
+    var icon = document.getElementById("themeToggleIcon");
+    if (!btn || !label || !icon) return;
+    var dark = document.documentElement.dataset.theme !== "light";
+    btn.setAttribute("aria-pressed", dark ? "true" : "false");
+    btn.setAttribute("aria-label", dark ? "Use light theme" : "Use dark theme");
+    label.textContent = dark ? "Light" : "Dark";
+    var sun =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+    var moon =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    icon.innerHTML = dark ? sun : moon;
+  }
+
+  function applyTheme(theme) {
+    var next = theme === "light" || theme === "dark" ? theme : null;
+    if (!next) {
+      next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    }
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch (_e) {}
+    syncThemeToggleUI();
+
+    if (typeof window.Plotly === "undefined") return;
+
+    if (baselineCache) {
+      renderBaselineCharts(baselineCache);
+    }
+
+    var wrap = document.getElementById("dynamicChartWrap");
+    if (lastDynamicChart && wrap && !wrap.classList.contains("hidden")) {
+      renderDynamicChart(lastDynamicChart);
+    }
+
+    requestAnimationFrame(function () {
+      document.querySelectorAll("#baselineRoot .plot-host").forEach(function (el) {
+        try {
+          window.Plotly.Plots.resize(el);
+        } catch (_e) {}
+      });
+      var dp = document.getElementById("dynamicPlot");
+      if (dp && wrap && !wrap.classList.contains("hidden")) {
+        try {
+          window.Plotly.Plots.resize(dp);
+        } catch (_e2) {}
+      }
+    });
+  }
+
   function yearBounds(y) {
-    const year = String(y);
+    var year = String(y);
     return { start: year + "-01-01", end: year + "-12-31" };
   }
 
   function plotlyLayoutBase(titleText, opts) {
-    const h = opts && opts.height ? opts.height : 320;
+    var P = getPlotTheme();
+    var h = opts && opts.height ? opts.height : 320;
     return {
-      title: { text: titleText, font: { size: 14, color: PLOT.title, family: PLOT.fontFamily } },
-      paper_bgcolor: PLOT.paper,
-      plot_bgcolor: PLOT.plot,
-      font: { color: PLOT.tick, family: PLOT.fontFamily, size: 11 },
+      title: { text: titleText, font: { size: 14, color: P.title, family: P.fontFamily } },
+      paper_bgcolor: P.paper,
+      plot_bgcolor: P.plot,
+      font: { color: P.tick, family: P.fontFamily, size: 11 },
       height: h,
       margin: { t: 44, r: 12, b: 56, l: 52 },
       xaxis: {
-        gridcolor: PLOT.grid,
+        gridcolor: P.grid,
         zeroline: false,
-        tickfont: { color: PLOT.tick, size: 10 },
-        title: { font: { size: 11, color: PLOT.tick } },
+        tickfont: { color: P.tick, size: 10 },
+        title: { font: { size: 11, color: P.tick } },
       },
       yaxis: {
-        gridcolor: PLOT.grid,
+        gridcolor: P.grid,
         zeroline: false,
-        tickfont: { color: PLOT.tick, size: 10 },
-        title: { font: { size: 11, color: PLOT.tick } },
+        tickfont: { color: P.tick, size: 10 },
+        title: { font: { size: 11, color: P.tick } },
       },
     };
   }
 
   function emptyFigure(title, message) {
-    const L = plotlyLayoutBase(title);
+    var P = getPlotTheme();
+    var L = plotlyLayoutBase(title);
     return {
       data: [
         {
@@ -73,7 +157,7 @@
             x: 0.5,
             y: 0.5,
             showarrow: false,
-            font: { size: 13, color: "#64748b", family: PLOT.fontFamily },
+            font: { size: 13, color: P.emptyAnnotation, family: P.fontFamily },
           },
         ],
         xaxis: { ...L.xaxis, visible: false },
@@ -83,9 +167,10 @@
   }
 
   function baselineFigure(spec, rows) {
-    const cat = spec.category_key || (rows[0] ? Object.keys(rows[0])[0] : "x");
-    const val = spec.value_key || (rows[0] ? Object.keys(rows[0])[1] : "y");
-    const L = plotlyLayoutBase(spec.title);
+    var P = getPlotTheme();
+    var cat = spec.category_key || (rows[0] ? Object.keys(rows[0])[0] : "x");
+    var val = spec.value_key || (rows[0] ? Object.keys(rows[0])[1] : "y");
+    var L = plotlyLayoutBase(spec.title);
     L.xaxis = { ...L.xaxis, title: { ...L.xaxis.title, text: spec.x_label || cat } };
     L.yaxis = { ...L.yaxis, title: { ...L.yaxis.title, text: spec.y_label || val } };
 
@@ -93,10 +178,10 @@
       return emptyFigure(spec.title, "No data for this year.");
     }
 
-    const x = rows.map(function (r) {
+    var x = rows.map(function (r) {
       return r[cat];
     });
-    const y = rows.map(function (r) {
+    var y = rows.map(function (r) {
       return r[val];
     });
 
@@ -108,8 +193,8 @@
             y: y,
             type: "scatter",
             mode: "lines+markers",
-            line: { color: PLOT.linePrimary, width: 2 },
-            marker: { size: 7, color: PLOT.lineMarker },
+            line: { color: P.linePrimary, width: 2 },
+            marker: { size: 7, color: P.lineMarker },
           },
         ],
         layout: L,
@@ -124,7 +209,7 @@
             type: "bar",
             marker: {
               color: y.map(function (_, i) {
-                const h = PLOT.barHue[i % PLOT.barHue.length];
+                var h = P.barHue[i % P.barHue.length];
                 return "hsla(" + h + ", 58%, 58%, 0.92)";
               }),
             },
@@ -142,8 +227,8 @@
             values: y,
             hole: 0.5,
             textinfo: "label+percent",
-            textfont: { size: 11, color: PLOT.title },
-            marker: { colors: PLOT.pie },
+            textfont: { size: 11, color: P.title },
+            marker: { colors: P.pie },
           },
         ],
         layout: {
@@ -152,7 +237,7 @@
           legend: {
             orientation: "h",
             y: -0.12,
-            font: { color: PLOT.tick, size: 10, family: PLOT.fontFamily },
+            font: { color: P.tick, size: 10, family: P.fontFamily },
           },
         },
       };
@@ -161,7 +246,7 @@
   }
 
   function setBaselineStatus(msg, kind) {
-    const el = document.getElementById("baselineStatus");
+    var el = document.getElementById("baselineStatus");
     if (!msg) {
       el.classList.add("hidden");
       el.textContent = "";
@@ -173,13 +258,13 @@
   }
 
   function populateYearSelect() {
-    const sel = document.getElementById("kpiYear");
+    var sel = document.getElementById("kpiYear");
     if (!sel) return;
-    const y = new Date().getFullYear();
+    var y = new Date().getFullYear();
     sel.innerHTML = "";
-    for (let i = 0; i <= 12; i++) {
-      const year = y - i;
-      const opt = document.createElement("option");
+    for (var i = 0; i <= 12; i++) {
+      var year = y - i;
+      var opt = document.createElement("option");
       opt.value = String(year);
       opt.textContent = String(year);
       if (i === 0) opt.selected = true;
@@ -187,106 +272,123 @@
     }
   }
 
-  async function loadBaseline() {
-    const root = document.getElementById("baselineRoot");
-    const yearEl = document.getElementById("kpiYear");
-    const year = yearEl ? yearEl.value : String(new Date().getFullYear());
-    const bounds = yearBounds(year);
-    const pill = document.getElementById("rangePill");
-    if (pill) pill.textContent = "Year " + year;
+  function renderBaselineCharts(data) {
+    var root = document.getElementById("baselineRoot");
+    if (!root || typeof window.Plotly === "undefined") return false;
 
-    if (typeof window.Plotly === "undefined") {
-      setBaselineStatus("Chart library failed to load. Check network or cdn.plot.ly.", "error");
-      root.innerHTML = "";
-      return;
-    }
+    var specs = data.chart_specs || [];
+    if (!specs.length) return false;
 
     root.innerHTML = "";
-    setBaselineStatus("Loading…", "info");
-
-    let data;
-    try {
-      const q =
-        "start=" +
-        encodeURIComponent(bounds.start) +
-        "&end=" +
-        encodeURIComponent(bounds.end);
-      const res = await fetch(BASE + "/api/dashboard/baseline?" + q);
-      const text = await res.text();
-      if (!res.ok) {
-        throw new Error(text || res.statusText);
-      }
-      data = JSON.parse(text);
-    } catch (e) {
-      setBaselineStatus("Could not load KPIs: " + (e.message || String(e)), "error");
-      root.innerHTML =
-        '<p class="chat-status">Ensure <code>SUPABASE_DB_URL</code> is set and the server is running.</p>';
-      return;
-    }
-
-    const specs = data.chart_specs || [];
-    if (!specs.length) {
-      setBaselineStatus("No chart definitions returned from API.", "error");
-      return;
-    }
-
-    for (let i = 0; i < specs.length; i++) {
-      const spec = specs[i];
-      const rows = (data.panels && data.panels[spec.chart_id]) || [];
-      const card = document.createElement("article");
+    for (var i = 0; i < specs.length; i++) {
+      var spec = specs[i];
+      var rows = (data.panels && data.panels[spec.chart_id]) || [];
+      var card = document.createElement("article");
       card.className = "chart-tile";
-      const h = document.createElement("h3");
+      var h = document.createElement("h3");
       h.textContent = spec.title;
-      const plotDiv = document.createElement("div");
+      var plotDiv = document.createElement("div");
       plotDiv.className = "plot-host";
       plotDiv.id = "base-" + spec.chart_id;
       card.appendChild(h);
       card.appendChild(plotDiv);
       root.appendChild(card);
 
-      const fig = baselineFigure(spec, rows);
+      var fig = baselineFigure(spec, rows);
       window.Plotly.newPlot(plotDiv.id, fig.data, fig.layout, {
         responsive: true,
         displayModeBar: "hover",
         displaylogo: false,
       });
     }
+    return true;
+  }
 
+  async function loadBaseline() {
+    var root = document.getElementById("baselineRoot");
+    var yearEl = document.getElementById("kpiYear");
+    var year = yearEl ? yearEl.value : String(new Date().getFullYear());
+    var bounds = yearBounds(year);
+    var pill = document.getElementById("rangePill");
+    if (pill) pill.textContent = "Year " + year;
+
+    if (typeof window.Plotly === "undefined") {
+      setBaselineStatus("Chart library failed to load. Check network or cdn.plot.ly.", "error");
+      root.innerHTML = "";
+      baselineCache = null;
+      return;
+    }
+
+    root.innerHTML = "";
+    setBaselineStatus("Loading…", "info");
+
+    var data;
+    try {
+      var q =
+        "start=" +
+        encodeURIComponent(bounds.start) +
+        "&end=" +
+        encodeURIComponent(bounds.end);
+      var res = await fetch(BASE + "/api/dashboard/baseline?" + q);
+      var text = await res.text();
+      if (!res.ok) {
+        throw new Error(text || res.statusText);
+      }
+      data = JSON.parse(text);
+    } catch (e) {
+      baselineCache = null;
+      setBaselineStatus("Could not load KPIs: " + (e.message || String(e)), "error");
+      root.innerHTML =
+        '<p class="chat-status">Ensure <code>SUPABASE_DB_URL</code> is set and the server is running.</p>';
+      return;
+    }
+
+    var specs = data.chart_specs || [];
+    if (!specs.length) {
+      baselineCache = null;
+      setBaselineStatus("No chart definitions returned from API.", "error");
+      return;
+    }
+
+    renderBaselineCharts(data);
+    baselineCache = data;
     setBaselineStatus("", "info");
   }
 
   function renderDynamicChart(chart) {
-    const wrap = document.getElementById("dynamicChartWrap");
-    const plotEl = document.getElementById("dynamicPlot");
+    var wrap = document.getElementById("dynamicChartWrap");
+    var plotEl = document.getElementById("dynamicPlot");
     if (!chart || typeof window.Plotly === "undefined") {
       wrap.classList.add("hidden");
+      lastDynamicChart = null;
       return;
     }
+    var P = getPlotTheme();
     wrap.classList.remove("hidden");
     plotEl.innerHTML = "";
-    const xk = chart.x_key;
-    const rows = chart.rows || [];
-    const t = plotlyLayoutBase(chart.title || "Result", { height: 360 });
+    var xk = chart.x_key;
+    var rows = chart.rows || [];
+    var t = plotlyLayoutBase(chart.title || "Result", { height: 360 });
     t.legend = {
       orientation: "h",
       y: -0.18,
-      font: { color: PLOT.tick, family: PLOT.fontFamily },
+      font: { color: P.tick, family: P.fontFamily },
     };
     t.xaxis = { ...t.xaxis, title: { ...t.xaxis.title, text: xk } };
     t.yaxis = { ...t.yaxis, title: { ...t.yaxis.title, text: "Value" } };
 
-    let traces = [];
-    const colors = ["#60a5fa", "#34d399", "#a78bfa", "#fb923c"];
+    var traces = [];
+    var colors = P.seriesColors;
     if (chart.series && chart.series.length) {
       chart.series.forEach(function (s, i) {
-        const xv = rows.map(function (r) {
+        var xv = rows.map(function (r) {
           return r[xk];
         });
-        const yv = rows.map(function (r) {
+        var yv = rows.map(function (r) {
           return r[s.key];
         });
-        const name = s.label || s.key;
-        const c = colors[i % colors.length];
+        var name = s.label || s.key;
+        var c = colors[i % colors.length];
         if (chart.kind === "bar") {
           traces.push({ x: xv, y: yv, name: name, type: "bar", marker: { color: c } });
         } else {
@@ -301,40 +403,42 @@
         }
       });
     } else if (chart.y_key) {
-      const bar = chart.kind === "bar";
-      const xv = rows.map(function (r) {
+      var bar = chart.kind === "bar";
+      var xv = rows.map(function (r) {
         return r[xk];
       });
-      const yv = rows.map(function (r) {
+      var yv = rows.map(function (r) {
         return r[chart.y_key];
       });
       traces = bar
-        ? [{ x: xv, y: yv, type: "bar", marker: { color: "#60a5fa" } }]
+        ? [{ x: xv, y: yv, type: "bar", marker: { color: P.singleLine } }]
         : [
             {
               x: xv,
               y: yv,
               type: "scatter",
               mode: "lines+markers",
-              line: { color: "#60a5fa" },
+              line: { color: P.singleLine },
             },
           ];
     } else {
       wrap.classList.add("hidden");
+      lastDynamicChart = null;
       return;
     }
 
+    lastDynamicChart = chart;
     window.Plotly.newPlot("dynamicPlot", traces, t, { responsive: true, displaylogo: false });
   }
 
   function appendMessage(role, text) {
-    const thread = document.getElementById("chatThread");
-    const wrap = document.createElement("div");
+    var thread = document.getElementById("chatThread");
+    var wrap = document.createElement("div");
     wrap.className = "msg " + (role === "user" ? "msg-user" : "msg-assistant");
-    const meta = document.createElement("div");
+    var meta = document.createElement("div");
     meta.className = "msg-meta";
     meta.textContent = role === "user" ? "You" : "Assistant";
-    const body = document.createElement("div");
+    var body = document.createElement("div");
     body.className = "msg-body";
     body.textContent = text;
     wrap.appendChild(meta);
@@ -344,10 +448,10 @@
   }
 
   function setView(name) {
-    const kpi = document.getElementById("viewKpi");
-    const chat = document.getElementById("viewChat");
-    const navKpi = document.getElementById("navKpi");
-    const navChat = document.getElementById("navChat");
+    var kpi = document.getElementById("viewKpi");
+    var chat = document.getElementById("viewChat");
+    var navKpi = document.getElementById("navKpi");
+    var navChat = document.getElementById("navChat");
 
     if (name === "kpi") {
       kpi.classList.add("is-visible");
@@ -370,8 +474,8 @@
       navChat.classList.add("is-active");
       navChat.setAttribute("aria-current", "page");
       navKpi.removeAttribute("aria-current");
-      const wrap = document.getElementById("dynamicChartWrap");
-      const dp = document.getElementById("dynamicPlot");
+      var wrap = document.getElementById("dynamicChartWrap");
+      var dp = document.getElementById("dynamicPlot");
       if (
         wrap &&
         !wrap.classList.contains("hidden") &&
@@ -385,14 +489,14 @@
     }
   }
 
-  let chatMemory = [];
+  var chatMemory = [];
 
   async function sendChat() {
-    const input = document.getElementById("chatInput");
-    const msg = input.value.trim();
-    const status = document.getElementById("chatStatus");
-    const btn = document.getElementById("sendChat");
-    const dynWrap = document.getElementById("dynamicChartWrap");
+    var input = document.getElementById("chatInput");
+    var msg = input.value.trim();
+    var status = document.getElementById("chatStatus");
+    var btn = document.getElementById("sendChat");
+    var dynWrap = document.getElementById("dynamicChartWrap");
 
     if (!msg) {
       status.textContent = "Type a message to send.";
@@ -401,18 +505,19 @@
     btn.disabled = true;
     status.textContent = "Sending…";
     dynWrap.classList.add("hidden");
+    lastDynamicChart = null;
 
     appendMessage("user", msg);
     input.value = "";
 
     try {
-      const res = await fetch(BASE + "/api/chat", {
+      var res = await fetch(BASE + "/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, memory: chatMemory }),
       });
-      const raw = await res.text();
-      let out;
+      var raw = await res.text();
+      var out;
       try {
         out = JSON.parse(raw);
       } catch {
@@ -426,7 +531,7 @@
         chatMemory = out.memory;
       }
 
-      const text = out.insight || out.message || "";
+      var text = out.insight || out.message || "";
       appendMessage("assistant", text || "(No text reply.)");
 
       if (out.chart) {
@@ -444,6 +549,15 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    syncThemeToggleUI();
+
+    var themeBtn = document.getElementById("themeToggle");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", function () {
+        applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+      });
+    }
+
     populateYearSelect();
 
     document.getElementById("navKpi").addEventListener("click", function () {
